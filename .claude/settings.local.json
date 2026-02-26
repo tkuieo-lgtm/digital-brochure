@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install:*)",
+      "Bash(npm run build:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs ps:*)",
+      "Bash(ps:*)",
+      "Bash(npm run dev:*)",
+      "Bash(node:*)",
+      "Bash(python3:*)",
+      "Bash(node_modules/.bin/vite build --mode development)",
+      "Bash(npm --prefix /Users/tkuieo/claude-work/digital_brochure/backend install qrcode)",
+      "WebSearch",
+      "WebFetch(domain:nodlik.github.io)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npm --prefix /Users/tkuieo/claude-work/digital_brochure/frontend install react-pageflip)",
+      "Bash(npx vite build:*)",
+      "Bash(npx --yes acorn:*)",
+      "Bash(npm --prefix /Users/tkuieo/claude-work/digital_brochure/frontend run build)"
+    ]
+  }
+}

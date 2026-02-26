@@ -1,0 +1,6 @@
+{"event":"session_end","sessionId":"19e54b90-d74d-49e8-aeac-8c8c8e09a5fb","ts":1771947900773,"brochureId":"febc2f7f-2b0a-49d9-9eba-3075b5d846e7","dwellTime":88700313,"ip":"::1","receivedAt":"2026-02-24T15:45:00.915Z"}
+{"event":"session_start","sessionId":"19e54b90-d74d-49e8-aeac-8c8c8e09a5fb","ts":1771947901736,"brochureId":"febc2f7f-2b0a-49d9-9eba-3075b5d846e7","context":"cover","ip":"::1","receivedAt":"2026-02-24T15:45:01.761Z"}
+{"event":"session_start","sessionId":"19e54b90-d74d-49e8-aeac-8c8c8e09a5fb","ts":1771947901737,"brochureId":"febc2f7f-2b0a-49d9-9eba-3075b5d846e7","context":"cover","ip":"::1","receivedAt":"2026-02-24T15:45:01.765Z"}
+{"event":"session_end","sessionId":"19e54b90-d74d-49e8-aeac-8c8c8e09a5fb","ts":1771953773789,"brochureId":"febc2f7f-2b0a-49d9-9eba-3075b5d846e7","dwellTime":5872052,"ip":"::1","receivedAt":"2026-02-24T17:22:54.125Z"}
+{"event":"session_start","sessionId":"19e54b90-d74d-49e8-aeac-8c8c8e09a5fb","ts":1771953774570,"brochureId":"febc2f7f-2b0a-49d9-9eba-3075b5d846e7","context":"cover","ip":"::1","receivedAt":"2026-02-24T17:22:54.630Z"}
+{"event":"session_start","sessionId":"19e54b90-d74d-49e8-aeac-8c8c8e09a5fb","ts":1771953774582,"brochureId":"febc2f7f-2b0a-49d9-9eba-3075b5d846e7","context":"cover","ip":"::1","receivedAt":"2026-02-24T17:22:54.630Z"}
