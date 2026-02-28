@@ -53,7 +53,7 @@ export default function Cover() {
       .then(b => {
         setBrochure(b);
         setLoading(false);
-        return loadPdf(api.pdfUrl(b.filename));
+        return loadPdf(b.pdfUrl);
       })
       .then(pdf => {
         loadAndApplyAppearance(id, pdf, setAppearance).catch(() => {});
@@ -176,7 +176,7 @@ export default function Cover() {
             </button>
 
             <a
-              href={api.pdfUrl(brochure.filename)}
+              href={brochure.pdfUrl}
               download
               className="btn btn-secondary cover-action-side"
               onClick={() => track('download_click', { brochureId: id })}

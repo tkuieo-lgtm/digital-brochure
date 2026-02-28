@@ -224,7 +224,7 @@ export default function ViewerFlip() {
         setBrochure(b);
         setMetadata(meta);
 
-        const pdf = await loadPdf(api.pdfUrl(b.filename));
+        const pdf = await loadPdf(b.pdfUrl);
         if (cancelled) return;
         setPdfDoc(pdf);
         setNumPages(pdf.numPages);

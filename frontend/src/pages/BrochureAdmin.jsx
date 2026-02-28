@@ -480,7 +480,7 @@ export default function BrochureAdmin() {
         setMetadata(meta);
         setEditTitle(b.title);
         setEditDesc(b.description || '');
-        const pdf = await loadPdf(api.pdfUrl(b.filename));
+        const pdf = await loadPdf(b.pdfUrl);
         if (cancelled) return;
         setPdfDoc(pdf);
         if (b.pageCount !== pdf.numPages) {
@@ -679,7 +679,7 @@ export default function BrochureAdmin() {
             <QRManager
               brochureId={id}
               qrCodes={metadata.qrCodes}
-              pdfUrl={api.pdfUrl(brochure.filename)}
+              pdfUrl={brochure.pdfUrl}
               pageCount={brochure.pageCount || pdfDoc?.numPages || 0}
               onChange={(qrs) => setMetadata(m => ({ ...m, qrCodes: qrs }))}
             />
@@ -708,7 +708,7 @@ export default function BrochureAdmin() {
       {/* Global Preview Modal */}
       {showPreview && pdfDoc && metadata && (
         <BrochurePreviewModal
-          pdfUrl={api.pdfUrl(brochure.filename)}
+          pdfUrl={brochure.pdfUrl}
           qrCodes={metadata.qrCodes}
           hotspots={metadata.hotspots}
           pageCount={brochure.pageCount || pdfDoc?.numPages || 0}

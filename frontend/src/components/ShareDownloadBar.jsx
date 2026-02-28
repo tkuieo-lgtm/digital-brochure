@@ -46,7 +46,7 @@ export default function ShareDownloadBar({ brochure, viewUrl }) {
     <>
       <div style={{ display: 'flex', gap: 8 }}>
         <a
-          href={api.pdfUrl(brochure.filename)}
+          href={brochure.pdfUrl}
           download
           className="btn btn-ghost btn-sm"
           onClick={() => track('download_click', { filename: brochure.filename })}

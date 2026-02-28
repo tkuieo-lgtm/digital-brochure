@@ -50,8 +50,6 @@ export const api = {
     return req('POST', `/brochures/${id}/background`, fd);
   },
 
-  pdfUrl: (filename) => `/storage/pdfs/${filename}`,
-
   // Analytics
   getAnalyticsSummary: (brochureId, from, to) => {
     const p = new URLSearchParams();

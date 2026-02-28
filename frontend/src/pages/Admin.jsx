@@ -12,7 +12,7 @@ function BrochureRow({ b, onDelete }) {
     let cancelled = false;
     (async () => {
       try {
-        const pdf = await loadPdf(api.pdfUrl(b.filename));
+        const pdf = await loadPdf(b.pdfUrl);
         const { canvas } = await renderPage(pdf, 1, 0.25);
         if (!cancelled && canvasRef.current) {
           const ctx = canvasRef.current.getContext('2d');

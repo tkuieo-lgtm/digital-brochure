@@ -7,11 +7,11 @@
  *
  * Fallback: multi-stage page rendering (scale=3, scale=5, 4 tiles).
  *
- * scanPdfForQR(pdfPath)          – scan all pages (auto)
- * scanPageRoi(pdfPath, pg, roi)  – scan a specific ROI (manual assist)
+ * scanPdfForQR(pdfBuffer)          – scan all pages (auto)
+ * scanPageRoi(pdfBuffer, pg, roi)  – scan a specific ROI (manual assist)
  *                                  returns { result, debug }
  */
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { writeFile, mkdir } from 'fs/promises';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -121,8 +121,9 @@ async function tryDecode(imgData, w, h) {
 }
 
 // ── PDF helpers ────────────────────────────────────────────────────────────
-async function openPdf(pdfPath) {
-  const data = new Uint8Array(await readFile(pdfPath));
+// Accepts a Buffer or Uint8Array — no filesystem access needed.
+async function openPdf(pdfData) {
+  const data = new Uint8Array(pdfData);
   return pdfjs.getDocument({
     data,
     verbosity:       0,
@@ -371,12 +372,13 @@ function isDupe(results, candidate) {
 }
 
 // ── Public: full PDF scan ──────────────────────────────────────────────────
-export async function scanPdfForQR(pdfPath) {
+// pdfBuffer: Buffer or Uint8Array — PDF content already in memory.
+export async function scanPdfForQR(pdfBuffer) {
   const ready = await loadDeps();
   if (!ready) return [];
 
   try {
-    const pdf     = await openPdf(pdfPath);
+    const pdf     = await openPdf(pdfBuffer);
     const results = [];
     const stats   = { xobj: 0, scale3: 0, scale5: 0, tiles: 0 };
 
@@ -477,18 +479,18 @@ export async function scanPdfForQR(pdfPath) {
  * Strategy 2 (fallback): render the full page at `scale`, crop the ROI, and
  * try 4 rotations — same as the original approach, with debug PNGs saved.
  *
- * @param {string}  pdfPath
+ * @param {Buffer|Uint8Array} pdfBuffer  PDF content already in memory
  * @param {number}  pageNum  1-indexed
  * @param {{ x, y, w, h }} roi  normalized 0–1 (relative to full page)
  * @param {number}  scale    render scale for fallback (default 5)
  * @returns {Promise<{ result: {url,format,location}|null, debug: object }>}
  */
-export async function scanPageRoi(pdfPath, pageNum, roi, scale = 5) {
+export async function scanPageRoi(pdfBuffer, pageNum, roi, scale = 5) {
   const ready = await loadDeps();
   if (!ready) return { result: null, debug: { error: 'deps not loaded' } };
 
   try {
-    const pdf  = await openPdf(pdfPath);
+    const pdf  = await openPdf(pdfBuffer);
     const page = await pdf.getPage(pageNum);
 
     // ── Strategy 1: XObject images overlapping the ROI ────────────────────

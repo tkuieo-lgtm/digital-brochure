@@ -1,7 +1,7 @@
 /**
  * analytics.js – MVP event storage + aggregation.
  *
- * Storage: one JSONL file per calendar day  →  storage/analytics/events-YYYY-MM-DD.jsonl
+ * Storage: one JSONL file per calendar day  →  analytics bucket: events-YYYY-MM-DD.jsonl
  *
  * Routes:
  *   POST /api/analytics/event                            – append one event
@@ -9,43 +9,47 @@
  *   GET  /api/analytics/events?brochureId&from&to       – raw events (for CSV export)
  */
 
-import { Router }                                 from 'express';
-import { appendFileSync, existsSync, readFileSync, mkdirSync } from 'fs';
-import { join, dirname }                          from 'path';
-import { fileURLToPath }                          from 'url';
-
-const __filename   = fileURLToPath(import.meta.url);
-const __dirname    = dirname(__filename);
-const storageDir   = join(__dirname, '..', 'storage');
-const analyticsDir = join(storageDir, 'analytics');
-mkdirSync(analyticsDir, { recursive: true });
+import { Router } from 'express';
+import * as storage from '../lib/storage.js';
 
 const router = Router();
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
-function eventsFile(date) {
-  return join(analyticsDir, `events-${date}.jsonl`);
-}
-
-/** Load all events in [from, to] date range (YYYY-MM-DD strings, inclusive). */
-function loadEvents(from, to) {
+/**
+ * Load all events in [from, to] date range (YYYY-MM-DD strings, inclusive).
+ * Downloads all day-files in parallel.
+ */
+async function loadEvents(from, to) {
   const today = new Date().toISOString().slice(0, 10);
   const start = from ?? today;
   const end   = to   ?? today;
-  const events = [];
-  const cur  = new Date(start + 'T00:00:00Z');
-  const last = new Date(end   + 'T00:00:00Z');
+
+  // Build list of dates
+  const dates = [];
+  const cur   = new Date(start + 'T00:00:00Z');
+  const last  = new Date(end   + 'T00:00:00Z');
   while (cur <= last) {
-    const date = cur.toISOString().slice(0, 10);
-    const file = eventsFile(date);
-    if (existsSync(file)) {
-      const lines = readFileSync(file, 'utf8').trim().split('\n').filter(Boolean);
-      for (const line of lines) {
-        try { events.push(JSON.parse(line)); } catch { /* skip corrupt line */ }
-      }
-    }
+    dates.push(cur.toISOString().slice(0, 10));
     cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+
+  // Download all day-files in parallel
+  const allLines = await Promise.all(
+    dates.map(async (date) => {
+      try {
+        const buf = await storage.download('analytics', `events-${date}.jsonl`);
+        if (!buf) return [];
+        return buf.toString('utf8').trim().split('\n').filter(Boolean);
+      } catch { return []; }
+    })
+  );
+
+  const events = [];
+  for (const lines of allLines) {
+    for (const line of lines) {
+      try { events.push(JSON.parse(line)); } catch { /* skip corrupt line */ }
+    }
   }
   return events;
 }
@@ -86,24 +90,35 @@ function buildSummary(events) {
 // ─── routes ───────────────────────────────────────────────────────────────────
 
 // POST /api/analytics/event
-router.post('/event', (req, res) => {
+router.post('/event', async (req, res) => {
   const event = req.body;
   if (!event?.event) return res.status(400).json({ error: 'event name required' });
+
   const line = JSON.stringify({
     ...event,
     ip:         req.ip,
     receivedAt: new Date().toISOString(),
   }) + '\n';
+
   const date = new Date().toISOString().slice(0, 10);
-  try { appendFileSync(eventsFile(date), line); } catch { /* best effort */ }
+  const path = `events-${date}.jsonl`;
+
+  // Best-effort: download existing content, append new line, re-upload
+  try {
+    let existing = '';
+    const buf = await storage.download('analytics', path);
+    if (buf) existing = buf.toString('utf8');
+    await storage.upload('analytics', path, Buffer.from(existing + line), 'text/plain');
+  } catch { /* best effort — never block the response */ }
+
   res.json({ ok: true });
 });
 
 // GET /api/analytics/summary?brochureId=...&from=YYYY-MM-DD&to=YYYY-MM-DD
-router.get('/summary', (req, res) => {
+router.get('/summary', async (req, res) => {
   const { brochureId, from, to } = req.query;
   try {
-    let events = loadEvents(from, to);
+    let events = await loadEvents(from, to);
     if (brochureId) events = events.filter(e => e.brochureId === brochureId);
     res.json(buildSummary(events));
   } catch (err) {
@@ -112,10 +127,10 @@ router.get('/summary', (req, res) => {
 });
 
 // GET /api/analytics/events?brochureId=...&from=...&to=...
-router.get('/events', (req, res) => {
+router.get('/events', async (req, res) => {
   const { brochureId, from, to } = req.query;
   try {
-    let events = loadEvents(from, to);
+    let events = await loadEvents(from, to);
     if (brochureId) events = events.filter(e => e.brochureId === brochureId);
     res.json(events);
   } catch (err) {

@@ -11,7 +11,7 @@ function BrochureCover({ brochure }) {
     let cancelled = false;
     (async () => {
       try {
-        const pdf = await loadPdf(api.pdfUrl(brochure.filename));
+        const pdf = await loadPdf(brochure.pdfUrl);
         const { canvas } = await renderPage(pdf, 1, 0.4);
         if (!cancelled && canvasRef.current) {
           const ctx = canvasRef.current.getContext('2d');

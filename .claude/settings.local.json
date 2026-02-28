@@ -19,7 +19,9 @@
       "Bash(npm --prefix /Users/tkuieo/claude-work/digital_brochure/frontend install react-pageflip)",
       "Bash(npx vite build:*)",
       "Bash(npx --yes acorn:*)",
-      "Bash(npm --prefix /Users/tkuieo/claude-work/digital_brochure/frontend run build)"
+      "Bash(npm --prefix /Users/tkuieo/claude-work/digital_brochure/frontend run build)",
+      "Bash(/Users/tkuieo/claude-work/digital_brochure/backend/.env:*)",
+      "Bash(git:*)"
     ]
   }
 }
