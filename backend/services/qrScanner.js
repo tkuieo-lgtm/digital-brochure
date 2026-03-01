@@ -1,16 +1,13 @@
 /**
- * Server-side QR scanner — pure JavaScript, no native binaries.
+ * Server-side QR scanner — pure JavaScript, no native binaries, no canvas.
  *
  * Dependencies (zero native addons):
- *   pdfjs-dist  — pure JS PDF renderer
- *   pureimage   — pure JS canvas (replaces @napi-rs/canvas)
+ *   pdfjs-dist  — pure JS PDF renderer (used only for operator list + XObject access)
  *   jsqr        — pure JS QR decoder
  *
  * Strategy:
- *   Stage 0 (primary):   extract raw image XObjects from the PDF and decode
- *                        them at native resolution — no page rendering needed.
- *   Stages 1-3 (fallback): render pages via pdfjs + pureimage, then try jsqr
- *                        on the full page and on 4 tile crops.
+ *   Stage 0 (only): extract raw image XObjects from the PDF and decode
+ *                   them at native resolution — no page rendering needed.
  *
  * Public API:
  *   scanPdfForQR(pdfBuffer)           — scan all pages
@@ -19,21 +16,18 @@
 
 // ── Lazy-loaded dependencies ───────────────────────────────────────────────
 
-let pdfjs   = null;
-let pureimg = null;
-let jsQR    = null;
+let pdfjs = null;
+let jsQR  = null;
 
 async function loadDeps() {
   if (pdfjs) return true;
   try {
-    const [pdfjsMod, pureimgMod, jsqrMod] = await Promise.all([
+    const [pdfjsMod, jsqrMod] = await Promise.all([
       import('pdfjs-dist/legacy/build/pdf.mjs'),
-      import('pureimage'),
       import('jsqr'),
     ]);
-    pdfjs   = pdfjsMod;
-    pureimg = pureimgMod.default ?? pureimgMod; // handle CJS default export
-    jsQR    = jsqrMod.default ?? jsqrMod;
+    pdfjs = pdfjsMod;
+    jsQR  = jsqrMod.default ?? jsqrMod;
     return true;
   } catch (err) {
     console.warn('[QR Scanner] deps unavailable:', err.message);
@@ -159,62 +153,6 @@ async function openPdf(pdfData) {
     isEvalSupported: false,
     disableFontFace: true,
   }).promise;
-}
-
-/**
- * Create a pureimage canvas + context.
- * Adds ctx.canvas back-reference that pdfjs-dist may require.
- */
-function makeCanvas(w, h) {
-  const canvas = pureimg.make(w, h);
-  const ctx    = canvas.getContext('2d');
-  if (!ctx.canvas) ctx.canvas = canvas;
-  return { canvas, ctx };
-}
-
-/**
- * Render one PDF page to an ImageData using pureimage.
- * Returns { imgData: ImageData, w, h } or throws.
- */
-async function renderPage(pdf, pageNum, scale) {
-  const page     = await pdf.getPage(pageNum);
-  const viewport = page.getViewport({ scale });
-  const w        = Math.ceil(viewport.width);
-  const h        = Math.ceil(viewport.height);
-  const { ctx }  = makeCanvas(w, h);
-
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, w, h);
-
-  await page.render({ canvasContext: ctx, viewport }).promise;
-  page.cleanup();
-
-  const raw = ctx.getImageData(0, 0, w, h);
-  return { imgData: new ImageData(raw.data, w, h), w, h };
-}
-
-/**
- * Crop a rectangle from an ImageData. Safe — clamps to bounds.
- */
-function cropImageData(imgData, px, py, pw, ph) {
-  px = Math.max(0, px);
-  py = Math.max(0, py);
-  pw = Math.min(pw, imgData.width  - px);
-  ph = Math.min(ph, imgData.height - py);
-  if (pw <= 0 || ph <= 0) return new ImageData(new Uint8ClampedArray(4), 1, 1);
-
-  const out = new Uint8ClampedArray(pw * ph * 4);
-  for (let y = 0; y < ph; y++) {
-    for (let x = 0; x < pw; x++) {
-      const srcI = ((py + y) * imgData.width + (px + x)) * 4;
-      const dstI = (y * pw + x) * 4;
-      out[dstI]     = imgData.data[srcI];
-      out[dstI + 1] = imgData.data[srcI + 1];
-      out[dstI + 2] = imgData.data[srcI + 2];
-      out[dstI + 3] = imgData.data[srcI + 3];
-    }
-  }
-  return new ImageData(out, pw, ph);
 }
 
 // ── XObject image extraction ───────────────────────────────────────────────
@@ -391,83 +329,25 @@ export async function scanPdfForQR(pdfBuffer) {
   try {
     const pdf     = await openPdf(pdfBuffer);
     const results = [];
-    const stats   = { xobj: 0, scale3: 0, scale5: 0, tiles: 0 };
+    let   xobjCount = 0;
 
     for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
       try {
-        // ── Stage 0: XObject extraction (native pixels, no rendering) ───────
-        try {
-          const page   = await pdf.getPage(pageNum);
-          const images = await extractPageImages(page);
-          for (const entry of images) {
-            const res = await tryDecodeXObj(entry);
-            if (!res) continue;
-            const candidate = { page: pageNum, source: 'auto', ...res };
-            if (!isDupe(results, candidate)) { results.push(candidate); stats.xobj++; }
-          }
-        } catch (xErr) {
-          console.warn(`[QR Scanner] XObj page ${pageNum}:`, xErr.message);
-        }
-
-        // Skip render fallback if XObject already found something on this page
-        if (results.some(r => r.page === pageNum)) continue;
-
-        // ── Stages 1-3: page rendering fallback (pureimage) ─────────────────
-        try {
-          // Stage 1: scale=3 full page
-          const r3 = await renderPage(pdf, pageNum, 3);
-          const f1 = await tryDecode(r3.imgData, r3.w, r3.h);
-          if (f1) {
-            const c = { page: pageNum, source: 'auto', ...f1 };
-            if (!isDupe(results, c)) { results.push(c); stats.scale3++; }
-            continue;
-          }
-
-          // Stage 2: scale=5 full page
-          const r5 = await renderPage(pdf, pageNum, 5);
-          const f2 = await tryDecode(r5.imgData, r5.w, r5.h);
-          if (f2) {
-            const c = { page: pageNum, source: 'auto', ...f2 };
-            if (!isDupe(results, c)) { results.push(c); stats.scale5++; }
-            continue;
-          }
-
-          // Stage 3: 4 tiles from the scale=3 image
-          const tW = Math.floor(r3.w / 2);
-          const tH = Math.floor(r3.h / 2);
-          for (const { ox, oy } of [
-            { ox: 0,  oy: 0  },
-            { ox: tW, oy: 0  },
-            { ox: 0,  oy: tH },
-            { ox: tW, oy: tH },
-          ]) {
-            const tw     = ox === 0 ? tW : r3.w - tW;
-            const th     = oy === 0 ? tH : r3.h - tH;
-            const tile   = cropImageData(r3.imgData, ox, oy, tw, th);
-            const foundT = await tryDecode(tile, tw, th);
-            if (foundT) {
-              foundT.location = {
-                x: ox / r3.w + foundT.location.x * (tw / r3.w),
-                y: oy / r3.h + foundT.location.y * (th / r3.h),
-                w: foundT.location.w * (tw / r3.w),
-                h: foundT.location.h * (th / r3.h),
-              };
-              const c = { page: pageNum, source: 'auto', ...foundT };
-              if (!isDupe(results, c)) { results.push(c); stats.tiles++; }
-              break;
-            }
-          }
-        } catch (rErr) {
-          console.warn(`[QR Scanner] render fallback page ${pageNum}:`, rErr.message);
+        const page   = await pdf.getPage(pageNum);
+        const images = await extractPageImages(page);
+        for (const entry of images) {
+          const res = await tryDecodeXObj(entry);
+          if (!res) continue;
+          const candidate = { page: pageNum, source: 'auto', ...res };
+          if (!isDupe(results, candidate)) { results.push(candidate); xobjCount++; }
         }
       } catch (pageErr) {
-        console.warn(`[QR Scanner] page ${pageNum} failed:`, pageErr.message);
+        console.warn(`[QR Scanner] page ${pageNum}:`, pageErr.message);
       }
     }
 
     console.log(
-      `[QR Scanner] scanned ${pdf.numPages} pages, found ${results.length}` +
-      ` (xobj: ${stats.xobj}, scale3: ${stats.scale3}, scale5: ${stats.scale5}, tiles: ${stats.tiles})`
+      `[QR Scanner] scanned ${pdf.numPages} pages, found ${results.length} (xobj: ${xobjCount})`
     );
     return results;
   } catch (err) {
@@ -478,17 +358,16 @@ export async function scanPdfForQR(pdfBuffer) {
 
 // ── Public: ROI scan (manual assist) ──────────────────────────────────────
 
-export async function scanPageRoi(pdfBuffer, pageNum, roi, scale = 5) {
+export async function scanPageRoi(pdfBuffer, pageNum, roi) {
   const ready = await loadDeps();
   if (!ready) return { result: null, debug: { error: 'deps not loaded' } };
 
   try {
-    const pdf  = await openPdf(pdfBuffer);
-    const page = await pdf.getPage(pageNum);
+    const pdf      = await openPdf(pdfBuffer);
+    const page     = await pdf.getPage(pageNum);
+    let   result   = null;
+    let   allImages = [];
 
-    // Strategy 1: XObject images overlapping the ROI
-    let result    = null;
-    let allImages = [];
     try {
       allImages = await extractPageImages(page);
     } catch (xErr) {
@@ -516,54 +395,6 @@ export async function scanPageRoi(pdfBuffer, pageNum, roi, scale = 5) {
 
     if (result) {
       console.log(`[QR Scanner] ROI scan found via XObj: ${result.url}`);
-      return { result, debug };
-    }
-
-    // Strategy 2: Render + crop fallback
-    debug.strategy = 'render';
-    try {
-      const r  = await renderPage(pdf, pageNum, scale);
-      const px = Math.max(0, Math.floor(roi.x * r.w));
-      const py = Math.max(0, Math.floor(roi.y * r.h));
-      const pw = Math.max(4, Math.ceil(roi.w  * r.w));
-      const ph = Math.max(4, Math.ceil(roi.h  * r.h));
-
-      debug.pagePx = { w: r.w, h: r.h };
-      debug.roiPx  = { x: px, y: py, w: pw, h: ph };
-      debug.scale  = scale;
-
-      const roiImgData = cropImageData(r.imgData, px, py, pw, ph);
-
-      for (const angle of [0, 90, 180, 270]) {
-        let imgD;
-        if (angle === 0) {
-          imgD = roiImgData;
-        } else if (angle === 90) {
-          const r90 = rotate90CW(roiImgData.data, roiImgData.width, roiImgData.height);
-          imgD = new ImageData(r90.data, r90.width, r90.height);
-        } else if (angle === 180) {
-          const r180 = rotate180(roiImgData.data, roiImgData.width, roiImgData.height);
-          imgD = new ImageData(r180.data, r180.width, r180.height);
-        } else {
-          const r270 = rotate270CW(roiImgData.data, roiImgData.width, roiImgData.height);
-          imgD = new ImageData(r270.data, r270.width, r270.height);
-        }
-
-        result = await tryDecode(imgD, imgD.width, imgD.height);
-        if (result) {
-          debug.foundAtAngle = angle;
-          result.location = {
-            x: roi.x + result.location.x * roi.w,
-            y: roi.y + result.location.y * roi.h,
-            w: result.location.w * roi.w,
-            h: result.location.h * roi.h,
-          };
-          break;
-        }
-      }
-    } catch (rErr) {
-      console.warn('[QR Scanner] ROI render fallback:', rErr.message);
-      debug.renderError = rErr.message;
     }
 
     return { result, debug };
