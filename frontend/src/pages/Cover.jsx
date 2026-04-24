@@ -81,6 +81,7 @@ export default function Cover() {
   // ── Share handlers ────────────────────────────────────────────────────────
   const handleShare = async () => {
     track('share_click', { brochureId: id, url: shareUrl });
+    window.gtag?.('event', 'share', { event_label: 'share_button' });
     if (navigator.share) {
       try {
         await navigator.share({
@@ -179,7 +180,7 @@ export default function Cover() {
               href={brochure.pdfUrl}
               download
               className="btn btn-secondary cover-action-side"
-              onClick={() => track('download_click', { brochureId: id })}
+              onClick={() => { track('download_click', { brochureId: id }); window.gtag?.('event', 'download', { event_label: 'download_button' }); }}
             >
               {S.downloadBtn}
             </a>

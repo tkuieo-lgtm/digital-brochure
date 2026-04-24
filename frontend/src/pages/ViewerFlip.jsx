@@ -172,12 +172,13 @@ export default function ViewerFlip() {
   const spreadRef     = useRef(spreadMode);
   const showSpreadRef = useRef(spreadMode); // hysteresis-aware effective spread
   const isFullscreenR = useRef(false);
-  useEffect(() => { zoomRef.current   = zoom;       }, [zoom]);
-  useEffect(() => { panXRef.current   = panX;       }, [panX]);
-  useEffect(() => { panYRef.current   = panY;       }, [panY]);
-  useEffect(() => { pageWRef.current  = pageW;      }, [pageW]);
-  useEffect(() => { pageHRef.current  = pageH;      }, [pageH]);
-  useEffect(() => { spreadRef.current = spreadMode; }, [spreadMode]);
+  useEffect(() => { zoomRef.current     = zoom;       }, [zoom]);
+  useEffect(() => { panXRef.current     = panX;       }, [panX]);
+  useEffect(() => { panYRef.current     = panY;       }, [panY]);
+  useEffect(() => { pageWRef.current    = pageW;      }, [pageW]);
+  useEffect(() => { pageHRef.current    = pageH;      }, [pageH]);
+  useEffect(() => { spreadRef.current   = spreadMode; }, [spreadMode]);
+  useEffect(() => { numPagesRef.current = numPages;   }, [numPages]);
 
   // ── Touch / drag refs ─────────────────────────────────────────────────────
   const touchStartX   = useRef(0);
@@ -195,11 +196,13 @@ export default function ViewerFlip() {
   const lastTapY            = useRef(0);
 
   // ── Misc refs ─────────────────────────────────────────────────────────────
-  const renderQueue = useRef(new Set());
-  const pagesRef    = useRef({});   // mirrors pages state – used inside ensurePage to avoid dep
-  const pageWH      = useRef({ w: 0, h: 0 }); // source-of-truth canvas dimensions
-  const toolbarTimer = useRef(null);
-  const flipAreaRef  = useRef(null);
+  const renderQueue    = useRef(new Set());
+  const pagesRef       = useRef({});   // mirrors pages state – used inside ensurePage to avoid dep
+  const pageWH         = useRef({ w: 0, h: 0 }); // source-of-truth canvas dimensions
+  const toolbarTimer   = useRef(null);
+  const flipAreaRef    = useRef(null);
+  const pageStartTime  = useRef(Date.now()); // GA4: when user arrived at current page
+  const numPagesRef    = useRef(0);          // GA4: mirror numPages for use in handleFlip
 
   // ── Session tracking ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -295,10 +298,27 @@ export default function ViewerFlip() {
     bookRef.current?.pageFlip().turnToPage(p - 1);
   }, [numPages]);
   const handleFlip = useCallback((e) => {
-    const page = e.data + 1;
+    const page    = e.data + 1;
+    const prevPage = currentPage;
+    const seconds  = Math.round((Date.now() - pageStartTime.current) / 1000);
+
+    // GA4: time spent on the page we're leaving
+    if (seconds > 0) {
+      window.gtag?.('event', 'time_on_page', { page_number: prevPage, seconds });
+    }
+    pageStartTime.current = Date.now();
+
     setCurrentPage(page);
     track('page_change', { brochureId: id, page });
-  }, [id]);
+
+    // GA4: page view inside the brochure
+    window.gtag?.('event', 'page_view_brochure', { page_number: page });
+
+    // GA4: brochure completed when reaching last page
+    if (page === numPagesRef.current) {
+      window.gtag?.('event', 'brochure_completed', { total_pages: numPagesRef.current });
+    }
+  }, [id, currentPage]);
 
   // ── Keyboard (RTL: ← = next, → = prev) ───────────────────────────────────
   useEffect(() => {

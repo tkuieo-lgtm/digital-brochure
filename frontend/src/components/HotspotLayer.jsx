@@ -53,6 +53,7 @@ export default function HotspotLayer({ qrCodes = [], hotspots = [], onNavigate, 
 
   const handleHotspot = (hs) => {
     if (!hs.action) return;
+    window.gtag?.('event', 'hotspot_click', { event_label: hs.label || hs.id });
     if (hs.action.type === 'page') {
       onNavigate(parseInt(hs.action.value, 10));
     } else if (hs.action.type === 'url') {
@@ -83,7 +84,7 @@ export default function HotspotLayer({ qrCodes = [], hotspots = [], onNavigate, 
               src={qr.overrideImageUrl}
               alt={`QR → ${targetUrl}`}
               title={`QR → ${targetUrl}`}
-              onClick={() => window.open(targetUrl, '_blank', 'noopener,noreferrer')}
+              onClick={() => { window.gtag?.('event', 'qr_scan', { event_label: 'qr_scan' }); window.open(targetUrl, '_blank', 'noopener,noreferrer'); }}
               style={{
                 ...locStyle(expanded),
                 display:        'block',
@@ -103,7 +104,7 @@ export default function HotspotLayer({ qrCodes = [], hotspots = [], onNavigate, 
             className={`hotspot-item qr-hotspot${pulsing ? ' hotspot-item--pulse' : ''}`}
             style={locStyle(loc)}
             title={`QR → ${targetUrl}`}
-            onClick={() => window.open(targetUrl, '_blank', 'noopener,noreferrer')}
+            onClick={() => { window.gtag?.('event', 'qr_scan', { event_label: 'qr_scan' }); window.open(targetUrl, '_blank', 'noopener,noreferrer'); }}
           />
         );
       })}

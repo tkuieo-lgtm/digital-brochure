@@ -20,6 +20,7 @@ export default function ShareDownloadBar({ brochure, viewUrl }) {
 
   const handleShare = async () => {
     track('share_click', { url: viewUrl });
+    window.gtag?.('event', 'share', { event_label: 'share_button' });
     if (navigator.share) {
       try {
         await navigator.share({
@@ -49,7 +50,7 @@ export default function ShareDownloadBar({ brochure, viewUrl }) {
           href={brochure.pdfUrl}
           download
           className="btn btn-ghost btn-sm"
-          onClick={() => track('download_click', { filename: brochure.filename })}
+          onClick={() => { track('download_click', { filename: brochure.filename }); window.gtag?.('event', 'download', { event_label: 'download_button' }); }}
         >
           {S.downloadBtn}
         </a>
